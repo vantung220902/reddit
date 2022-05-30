@@ -1,3 +1,5 @@
+import { Upvote } from './../entities/Upvote';
+import { VoteType } from './../type/VoteType';
 import { Context } from './../type/Context';
 import { PaginatedPosts } from './../type/PaginatedPosts';
 import { User } from './../entities/User';
@@ -8,6 +10,14 @@ import { PostMutationResponse } from './../type/PostMutationReponse';
 import { UpdatePostInput } from './../type/UpdatePostInput';
 import { checkAuth } from '../middleware/checkAuth';
 import { LessThan } from 'typeorm';
+import { registerEnumType } from "type-graphql";
+import { UserInputError } from 'apollo-server-core';
+
+registerEnumType(VoteType, {
+    name: "VoteType", // this one is mandatory
+    description: "Vote Type", // this one is optional
+});
+
 @Resolver(_of => Post)
 export class PostResolver {
     @FieldResolver(_return => String)
@@ -16,10 +26,17 @@ export class PostResolver {
     }
 
     @FieldResolver(_return => User)
-    async user(@Root() root: Post) {
-        return await User.findOne(root.userId)
+    async user(@Root() root: Post, @Ctx() { dataLoaders: { userLoader } }: Context) {
+        return await userLoader.load(root.userId)
     }
 
+    @FieldResolver(_return => Int)
+    async voteType(@Root() root: Post, @Ctx() { req, dataLoaders: { voteTypeLoader } }: Context) {
+        if (!req.session.userId) return 0;
+        // const existingVote = await Upvote.findOne({ postId: root.id, userId: req.session.userId })
+        const existingVote = await voteTypeLoader.load({ postId: root.id, userId: req.session.userId })
+        return existingVote ? existingVote.value : 0
+    }
 
     @Mutation(_return => PostMutationResponse)
     @UseMiddleware(checkAuth)
@@ -88,7 +105,7 @@ export class PostResolver {
     }
 
     @Query(_return => Post, { nullable: true })
-    async post(@Arg('id', _type => Int) id: number): Promise<Post | undefined> {
+    async post(@Arg('id', _type => ID) id: number): Promise<Post | undefined> {
         try {
             return await Post.findOne(id);
         } catch (error) {
@@ -155,7 +172,7 @@ export class PostResolver {
             await Post.delete({ id })
             return {
                 code: 200,
-                success: false,
+                success: true,
                 message: 'Post deleted successfully',
             }
         } catch (error) {
@@ -166,5 +183,46 @@ export class PostResolver {
                 message: `Internal server error ${error.message} `
             };
         }
+    }
+
+    @Mutation(_return => PostMutationResponse)
+    @UseMiddleware(checkAuth)
+    async vote(@Arg('postId', _type => Int) postId: number, @Arg('inputVoteValue', _type => VoteType) inputVoteValue: VoteType
+        , @Ctx() { req: { session: { userId } }, connection }: Context)
+        : Promise<PostMutationResponse> {
+        return await connection.transaction(async transactionEntityManager => {
+            let post = await transactionEntityManager.findOne(Post, postId);
+            if (!post) throw new UserInputError('Post not found');
+
+            //check if user has voted or not
+            const existingVote = await transactionEntityManager.findOne(Upvote, { userId, postId });
+
+            if (existingVote && existingVote.value !== inputVoteValue) {
+                await transactionEntityManager.save(Upvote, {
+                    ...existingVote,
+                    value: inputVoteValue
+                })
+                post = await transactionEntityManager.save(Post, {
+                    ...post,
+                    points: post.points + 2 * inputVoteValue
+                });
+            }
+            if (!existingVote) {
+                const newVote = transactionEntityManager.create(Upvote, {
+                    userId,
+                    postId,
+                    value: inputVoteValue
+                })
+                await transactionEntityManager.save(newVote);
+                post.points = post.points + inputVoteValue;
+                post = await transactionEntityManager.save(post);
+            }
+            return {
+                code: 200,
+                success: true,
+                message: 'Post voted',
+                post,
+            }
+        })
     }
 }

@@ -16,20 +16,37 @@ import MongoStore from 'connect-mongo'
 import { COOKIE_NAME, __prod__ } from './utils/constants';
 import { Context } from './type/Context';
 import cors from 'cors';
+import { Upvote } from './entities/Upvote';
+import { buildDataLoaders } from './utils/dataLoaders';
+import path from 'path/posix';
 const main = async () => {
-    await createConnection({
+    const connection = await createConnection({
         type: 'postgres',
-        database: 'reddit',
-        username: process.env.DB_USERNAME_DEV,
-        password: process.env.DB_PASSWORD_DEV,
+        ...(__prod__ ? { url: process.env.DATABASE_URL } : {
+            database: 'reddit',
+            username: process.env.DB_USERNAME_DEV,
+            password: process.env.DB_PASSWORD_DEV,
+        }),
         logging: true,
-        synchronize: true,
-        entities: [User, Post]
+        ...(__prod__ ? {
+            extra: {
+                ssl: {
+                    rejectUnauthorized: false,
+                }
+            },
+            ssl: true
+        } : {}),
+        ...(__prod__ ? {} : { synchronize: true, }),
+        entities: [User, Post, Upvote],
+        migrations: [path.join(__dirname, '/migrations/*')]
     })
+
+    if (__prod__) await connection.runMigrations();
+
     const app = express();
 
     app.use(cors({
-        origin: 'http://localhost:3000',
+        origin: __prod__ ? process.env.CORS_ORIGIN_PROD : process.env.CORS_ORIGIN_DEV,
         credentials: true
     }))
 
@@ -48,6 +65,7 @@ const main = async () => {
             httpOnly: true,//JS from front-end cannot access cookie
             secure: __prod__,  // cookie only works in https
             sameSite: 'lax',//protection against CSRF
+            domain:__prod__ ? '.vercel.app': undefined
         },
         secret: process.env.SESSION_SECRET_DEV_PROD as string,
         saveUninitialized: false,//don't save empty session, right from the start
@@ -56,7 +74,7 @@ const main = async () => {
 
     const apolloServer = new ApolloServer({
         schema: await buildSchema({ resolvers: [HelloResolver, UserResolver, PostResolver], validate: false }),
-        context: ({ req, res }): Context => ({ req, res }),
+        context: ({ req, res }): Context => ({ req, res, connection, dataLoaders: buildDataLoaders() }),
         plugins: [ApolloServerPluginLandingPageGraphQLPlayground()]
 
     })

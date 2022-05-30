@@ -2,14 +2,6 @@ mutation CreatePost($createPostInput:CreatePostInput!) {
   createPost(
     createPostInput: $createPostInput
   ) {
-    code
-    success
-    message
-    post {
-    ...postWithUserInfo
-    }
-    error {
-     ...filedError
-    }
+   ...postMutationResponse
   }
 }

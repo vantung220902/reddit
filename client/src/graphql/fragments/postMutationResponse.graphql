@@ -1,0 +1,10 @@
+fragment postMutationResponse on PostMutationResponse{
+  ...postMutationStatus
+    post {
+    ...postWithUserInfo
+    }
+    error {
+     ...filedError
+    }
+
+}

@@ -3,9 +3,12 @@ fragment postWithUserInfo on Post{
     title
     text
     textSnippet
+    points
+    voteType
     createdAt
     updatedAt
     user{
+      id
       username
     }
 }

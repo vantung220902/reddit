@@ -7,9 +7,22 @@ export const useCheckAuth = () => {
 
     useEffect(() => {
         if (!loading) {
-            if (data?.me && (router.route === '/login' || router.route === '/register' || router.route === '/forgot-password'
-                || router.route === '/change-password')) router.replace('/')
-            else if (!data?.me) router.replace('/login')
+            if (
+                data?.me &&
+                (router.route === '/login' ||
+                    router.route === '/register' ||
+                    router.route === '/forgot-password' ||
+                    router.route === '/change-password')
+            ) {
+                router.replace('/')
+            } else if (
+                !data?.me &&
+                router.route !== '/login' &&
+                router.route !== '/register'
+                && router.route !== '/forgot-password' && router.route !== '/change-password'
+            ) {
+                router.replace('/login')
+            }
         }
 
     }, [data, loading, router]);

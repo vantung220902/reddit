@@ -1,10 +1,12 @@
 import { useMemo } from 'react'
 import { ApolloClient, HttpLink, InMemoryCache, from, NormalizedCacheObject } from '@apollo/client'
 import { onError } from '@apollo/client/link/error'
-// import { concatPagination } from '@apollo/client/utilities'
+import fetch from 'isomorphic-unfetch'
 import merge from 'deepmerge'
 import isEqual from 'lodash/isEqual'
 import { Post } from '../generated/graphql'
+import { IncomingHttpHeaders } from 'http'
+import Router from 'next/router'
 
 export const APOLLO_STATE_PROP_NAME = '__APOLLO_STATE__'
 
@@ -14,22 +16,31 @@ interface IApolloStateProps {
     [APOLLO_STATE_PROP_NAME]?: NormalizedCacheObject
 }
 
-const errorLink = onError(({ graphQLErrors, networkError }) => {
-    if (graphQLErrors)
-        graphQLErrors.map(({ message, locations, path }) =>
-            console.log(
-                `[GraphQL error]: Message: ${message}, Location: ${locations}, Path: ${path}`
-            )
-        )
-    if (networkError) console.log(`[Network error]: ${networkError}`)
+const errorLink = onError(errors => {
+    if (errors.graphQLErrors && errors.graphQLErrors[0].extensions?.code === 'UNAUTHENTICATED' && errors.response) {
+        errors.response.errors = undefined;
+        Router.replace('/login');
+    }
 })
 
-const httpLink = new HttpLink({
-    uri: 'http://localhost:4000/graphql', // Server URL (must be absolute)
-    credentials: 'include', // Additional fetch() options like `credentials` or `headers`
-})
 
-function createApolloClient() {
+
+function createApolloClient(headers: IncomingHttpHeaders | null = null) {
+    const enhanceFetch = (url: RequestInfo, init: RequestInit) => {
+        return fetch(url, {
+            ...init,
+            headers: {
+                ...init.headers,
+                'Access-Control-Allow-Origin': '*',
+                Cookie: headers?.cookie ?? '',
+            }
+        })
+    }
+    const httpLink = new HttpLink({
+        uri: 'http://localhost:4000/graphql', // Server URL (must be absolute)
+        credentials: 'include', // Additional fetch() options like `credentials` or `headers`,
+        fetch: enhanceFetch
+    })
     return new ApolloClient({
         ssrMode: typeof window === 'undefined',
         link: from([errorLink, httpLink]),
@@ -64,8 +75,11 @@ function createApolloClient() {
     })
 }
 
-export function initializeApollo(initialState: NormalizedCacheObject | null = null) {
-    const _apolloClient = apolloClient ?? createApolloClient()
+export function initializeApollo({ headers, initialState }: {
+    headers?: IncomingHttpHeaders | null,
+    initialState?: NormalizedCacheObject | null
+} = { headers: null, initialState: null }) {
+    const _apolloClient = apolloClient ?? createApolloClient(headers)
 
     // If your page has Next.js data fetching methods that use Apollo Client, the initial state
     // gets hydrated here
@@ -106,6 +120,6 @@ export function addApolloState(client: ApolloClient<NormalizedCacheObject>, page
 
 export function useApollo(pageProps: IApolloStateProps) {
     const state = pageProps[APOLLO_STATE_PROP_NAME]
-    const store = useMemo(() => initializeApollo(state), [state])
+    const store = useMemo(() => initializeApollo({ initialState: state }), [state])
     return store
 }

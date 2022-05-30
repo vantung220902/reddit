@@ -13,9 +13,9 @@ import { GetServerSideProps, GetServerSidePropsContext } from 'next'
 import NextLink from 'next/link'
 import Layout from '../components/Layout'
 import PostEditDeleteButtons from '../components/PostEditDeleteButtons'
-import { PostsDocument, usePostsQuery } from '../generated/graphql'
+import { PostsDocument, useMeQuery, usePostsQuery } from '../generated/graphql'
 import { addApolloState, initializeApollo } from '../lib/apolloClient'
-
+import UpVoteSection from '../components/UpvoteSection'
 export const limit = 3
 
 const Index = () => {
@@ -25,6 +25,7 @@ const Index = () => {
     // component nao render boi cai Posts query, se rerender khi networkStatus thay doi, tuc la fetchMore
     notifyOnNetworkStatusChange: true
   })
+  const { data: meData } = useMeQuery();
 
   const loadingMorePosts = networkStatus === NetworkStatus.fetchMore
 
@@ -41,7 +42,7 @@ const Index = () => {
         <Stack spacing={8}>
           {data?.posts?.paginatedPosts.map(post => (
             <Flex key={post.id} p={5} shadow='md' borderWidth='1px'>
-
+              <UpVoteSection post={post} />
               <Box flex={1}>
                 <NextLink href={`/post/${post.id}`}>
                   <Link>
@@ -52,9 +53,7 @@ const Index = () => {
                 <Flex align='center'>
                   <Text mt={4}>{post.textSnippet}</Text>
                   <Box ml='auto'>
-                    <PostEditDeleteButtons
-                    
-                    />
+                    {meData?.me?.id === post.user.id && <PostEditDeleteButtons postId={post.id} />}
                   </Box>
                 </Flex>
               </Box>
@@ -82,6 +81,7 @@ const Index = () => {
 export const getServerSideProps: GetServerSideProps = async (
   context: GetServerSidePropsContext
 ) => {
+
   const apolloClient = initializeApollo({ headers: context.req.headers })
 
   await apolloClient.query({

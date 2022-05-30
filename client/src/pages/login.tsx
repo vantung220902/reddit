@@ -1,12 +1,12 @@
 import { Box, Button, Flex, Link, Spinner, useToast } from '@chakra-ui/react';
 import { Form, Formik, FormikHelpers } from 'formik';
+import NextLink from 'next/link';
 import { useRouter } from 'next/router';
 import InputField from '../components/InputField';
 import Wrapper from '../components/Wrapper';
 import { LoginInput, MeDocument, MeQuery, useLoginMutation } from '../generated/graphql';
 import { mapFieldErrors } from '../helper/mapFieldError';
 import { useCheckAuth } from '../utils/useCheckAuth';
-import NextLink from 'next/link'
 const Login = () => {
     const router = useRouter();
 
