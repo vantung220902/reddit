@@ -57,20 +57,23 @@ const main = async () => {
     })
     console.log('MongoDB connected')
 
-    app.use(session({
-        name: COOKIE_NAME,
-        store: MongoStore.create({ mongoUrl }),
-        cookie: {
-            maxAge: 1000 * 60 * 60,
-            httpOnly: true,//JS from front-end cannot access cookie
-            secure: __prod__,  // cookie only works in https
-            sameSite: 'lax',//protection against CSRF
-            domain:__prod__ ? '.vercel.app': undefined
-        },
-        secret: process.env.SESSION_SECRET_DEV_PROD as string,
-        saveUninitialized: false,//don't save empty session, right from the start
-        resave: false,
-    }));
+    app.set('trust proxy', 1);
+
+    app.use(
+        session({
+            name: COOKIE_NAME,
+            store: MongoStore.create({ mongoUrl }),
+            cookie: {
+                maxAge: 1000 * 60 * 60, // one hour
+                httpOnly: true, // JS front end cannot access the cookie
+                secure: __prod__, // cookie only works in https
+                sameSite: 'none'
+            },
+            secret: process.env.SESSION_SECRET_DEV_PROD as string,
+            saveUninitialized: false, // don't save empty sessions, right from the start
+            resave: false
+        })
+    );
 
     const apolloServer = new ApolloServer({
         schema: await buildSchema({ resolvers: [HelloResolver, UserResolver, PostResolver], validate: false }),
